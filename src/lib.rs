@@ -92,4 +92,12 @@ impl NFTFactory {
                 MAX_GAS
             );
     }
+
+    pub fn is_subaccount_exist(&self, subaccount: String) -> bool {
+        if self.subaccounts.contains(&subaccount) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 }
