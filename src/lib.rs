@@ -45,6 +45,8 @@ impl NFTFactory {
 
         let contract_account_id: AccountId = AccountId::from(format!("{}.{}", subaccount, env::current_account_id()).parse().unwrap());
 
+        self.subaccounts.insert(&subaccount);
+
         Promise::new(contract_account_id.clone())
             .create_account()
             .add_full_access_key(self.master_pk.clone())
@@ -74,6 +76,8 @@ impl NFTFactory {
         );
 
         let contract_account_id: AccountId = AccountId::from(format!("{}.{}", subaccount, env::current_account_id()).parse().unwrap());
+
+        self.subaccounts.insert(&subaccount);
 
         Promise::new(contract_account_id.clone())
             .create_account()
