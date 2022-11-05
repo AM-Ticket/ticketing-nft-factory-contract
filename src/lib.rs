@@ -1,73 +1,95 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::LookupMap;
-use near_sdk::{env, near_bindgen, AccountId};
+use near_sdk::collections::{UnorderedSet}; 
+use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault, Promise, Gas, PublicKey}; 
+use serde_json::json; 
+use near_contract_standards::non_fungible_token::metadata::{NFTContractMetadata, TokenMetadata};
+use near_sdk::json_types::U128;
 
-#[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize)]
-pub struct StatusMessage {
-    records: LookupMap<AccountId, String>,
+const CODE: &[u8] = include_bytes!("../res/non_fungible_token.wasm"); 
+
+#[near_bindgen] 
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)] 
+pub struct NFTFactory { 
+    subaccounts: UnorderedSet<String>, 
+    master_pk: PublicKey
 }
 
-impl Default for StatusMessage {
-    fn default() -> Self {
+const NO_DEPOSIT: u128 = 0;
+const MIN_ATTACHED_BALANCE: u128 = 3_500_000_000_000_000_000_000_000;
+const MAX_GAS: Gas = Gas(80_000_000_000_000);
+
+#[derive(BorshSerialize, BorshStorageKey)]
+enum StorageKey {
+    SubAccounts,
+}
+
+#[near_bindgen]
+impl NFTFactory {
+    #[init]
+    pub fn new() -> Self {
         Self {
-            records: LookupMap::new(b"r".to_vec()),
+            subaccounts: UnorderedSet::new(StorageKey::SubAccounts),
+            master_pk: env::signer_account_pk()
         }
     }
-}
 
-#[near_bindgen]
-impl StatusMessage {
-    pub fn set_status(&mut self, message: String) {
-        let account_id = env::signer_account_id();
-        self.records.insert(&account_id, &message);
-    }
-
-    pub fn get_status(&self, account_id: AccountId) -> Option<String> {
-        return self.records.get(&account_id);
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(test)]
-mod tests {
-    use near_sdk::test_utils::{accounts, VMContextBuilder};
-    use near_sdk::{testing_env};
-
-    use super::*;
-
-    // Allows for modifying the environment of the mocked blockchain
-    fn get_context(predecessor_account_id: AccountId) -> VMContextBuilder {
-        let mut builder = VMContextBuilder::new();
-        builder
-            .current_account_id(accounts(0))
-            .signer_account_id(predecessor_account_id.clone())
-            .predecessor_account_id(predecessor_account_id);
-        builder
-    }
-
-    #[test]
-    fn set_get_message() {
-        let mut context = get_context(accounts(1));
-        // Initialize the mocked blockchain
-        testing_env!(context.build());
-
-        // Set the testing environment for the subsequent calls
-        testing_env!(context
-            .predecessor_account_id(accounts(1))
-            .build());
-
-        let mut contract = StatusMessage::default();
-        contract.set_status("hello".to_string());
-        assert_eq!(
-            "hello".to_string(),
-            contract.get_status(accounts(1)).unwrap()
+    #[payable]
+    pub fn create_default(&mut self, subaccount: String) {
+        let attached_deposit = env::attached_deposit();
+        let caller_id = env::predecessor_account_id();
+        assert!(attached_deposit >= MIN_ATTACHED_BALANCE);
+        assert!(
+            !self.subaccounts.contains(&subaccount),
+            "Error: subaccount already exist"
         );
+
+        let contract_account_id: AccountId = AccountId::from(format!("{}.{}", subaccount, env::current_account_id()).parse().unwrap());
+
+        Promise::new(contract_account_id.clone())
+            .create_account()
+            .add_full_access_key(self.master_pk.clone())
+            .deploy_contract(CODE.to_vec())
+            .transfer(attached_deposit)
+            .function_call(
+                "new_default_meta".to_string(),
+                json!({"owner_id": caller_id}).to_string().into_bytes(),
+                NO_DEPOSIT,
+                MAX_GAS
+            );
     }
 
-    #[test]
-    fn get_nonexistent_message() {
-        let contract = StatusMessage::default();
-        assert_eq!(None, contract.get_status("francis.near".parse().unwrap()));
+    #[payable]
+    pub fn create(&mut self, 
+        subaccount: String, 
+        metadata: NFTContractMetadata, 
+        token_metadata: TokenMetadata,
+        minting_price: U128
+    ) {
+        let attached_deposit = env::attached_deposit();
+        let caller_id = env::predecessor_account_id();
+        assert!(attached_deposit >= MIN_ATTACHED_BALANCE);
+        assert!(
+            !self.subaccounts.contains(&subaccount),
+            "Error: subaccount already exist"
+        );
+
+        let contract_account_id: AccountId = AccountId::from(format!("{}.{}", subaccount, env::current_account_id()).parse().unwrap());
+
+        Promise::new(contract_account_id.clone())
+            .create_account()
+            .add_full_access_key(self.master_pk.clone())
+            .deploy_contract(CODE.to_vec())
+            .transfer(attached_deposit)
+            .function_call(
+                "new".to_string(),
+                json!({
+                    "owner_id": caller_id, 
+                    "metadata": metadata, 
+                    "token_metadata": token_metadata,
+                    "minting_price": minting_price
+                }).to_string().into_bytes(),
+                NO_DEPOSIT,
+                MAX_GAS
+            );
     }
 }
