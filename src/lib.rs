@@ -1,6 +1,7 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{UnorderedSet}; 
 use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault, Promise, Gas, PublicKey}; 
+use std::collections::HashMap;
 use serde_json::json; 
 use near_contract_standards::non_fungible_token::metadata::{NFTContractMetadata, TokenMetadata};
 use near_sdk::json_types::U128;
@@ -65,7 +66,8 @@ impl NFTFactory {
         subaccount: String, 
         metadata: NFTContractMetadata, 
         token_metadata: TokenMetadata,
-        minting_price: U128
+        minting_price: U128,
+        perpetual_royalties: Option<HashMap<AccountId, u32>>
     ) {
         let attached_deposit = env::attached_deposit();
         let caller_id = env::predecessor_account_id();
@@ -90,7 +92,8 @@ impl NFTFactory {
                     "owner_id": caller_id, 
                     "metadata": metadata, 
                     "token_metadata": token_metadata,
-                    "minting_price": minting_price
+                    "minting_price": minting_price,
+                    "perpetual_royalties": perpetual_royalties
                 }).to_string().into_bytes(),
                 NO_DEPOSIT,
                 MAX_GAS
